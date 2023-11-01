@@ -2,9 +2,8 @@
 -- droping the database if it exists already
 DROP DATABASE IF EXISTS employee_db;
 --creating the database
-#creating the database
 CREATE DATABASE employee_db;
-#using the database
+--using the database
 USE employee_db;
 --creating the tables, this is the department table
 CREATE TABLE department (
