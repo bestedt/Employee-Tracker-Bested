@@ -8,6 +8,7 @@ const app = express();
 const inquirer = require('inquirer');
 // read online that the conosole.table package is a good way to display the database in a table format, so I installed it. It worked great instead of having the info returned like an object
 const cTable = require('console.table');
+const { up } = require('inquirer/lib/utils/readline');
 // Express middleware
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -25,39 +26,44 @@ const db = mysql.createConnection(
     console.log(`Connected to the employee_db database.`)
 );
 
-
+// this is the query that will display all the employees, roles, departments, and managers. I put it in a query file so i could call it later
 const queries = fs.readFileSync('./db/query.sql', 'utf8').split(';').filter(query => query.trim() !== '');
 
-// Query database with the following choices for the user to choose from
-const choices = [
-    {
-
-        type: 'list',
-        name: 'action',
-        message: 'What would you like to do?',
-        choices: [
-            'View all Employees',
-            'Add an employee',
-            'Update an employee role',
-            'View all roles',
-            'Add a role',
-            'View all departments',
-            'Add a department',
-            'View all Managers',
-            'Add a Manager',
-            'Exit'
-        ]
-    }];
-
-
-
-
-// show the choices to the user using the inquirer prompt
+// combined the choices, title and showChoices function into one function to make it easier to call later
 function showChoices() {
-    inquirer.prompt(choices).then((answers) => {
+    inquirer.prompt([
+        {
+            // opening message
+            type: 'title',
+            name: 'title',
+            message: ('Hey Boss!! Lets get to work!!'),
+        },
+        {
+            // the choices for the user to choose from
+            type: 'list',
+            name: 'action',
+            message: 'What would you like to do?',
+            choices: [
+                'View all Employees',
+                'Add an employee',
+                'Update an employee',
+                'View all roles',
+                'Add a role',
+                'View all departments',
+                'Add a department',
+                'View all Managers',
+                'Add a Manager',
+                'Exit'
+            ]
+        }
+        // this is the promise that will handle the user choice
+    ]).then((answers) => {
         handleUserChoice(answers.action);
     });
 }
+
+
+
 // here is the add employee function, it asks the user info about the employee and then inserts it into the database using the prompt and then the query
 function addEmployee() {
     inquirer
@@ -202,6 +208,118 @@ function addManager() {
             );
         });
 }
+// function to select the employee to update, this will be used in the update employee function, at first it wanted me to select an employee id which was hard to remember so i changed it to the full name
+function selectEmployeeToUpdate() {
+    db.query('SELECT id, CONCAT(first_name, " ", last_name) AS full_name FROM employee', (err, results) => {
+        if (err) {
+            console.error('Database error:', err);
+        } else {
+            // Extract the employee IDs and full names from the results
+            const employeeChoices = results.map((employee) => ({
+                name: employee.full_name,
+                value: employee.id,
+            }));
+// prompt the user to select an employee to update and then ask them what they would like to update, the list of employees is pulled from the query above
+            inquirer
+                .prompt([
+                    {
+                        type: 'list',
+                        name: 'employeeId',
+                        message: 'Select an employee to update:',
+                        choices: employeeChoices,
+                    },
+                ])
+                .then((answers) => {
+                    const employeeId = answers.employeeId;
+// this is the second prompt, asking the user what they would like to update, the choices are edit role and edit manager
+                    inquirer
+                        .prompt([
+                            {
+                                type: 'list',
+                                name: 'editOption',
+                                message: 'What would you like to edit?',
+                                choices: ['Edit role', 'Edit manager'],
+                            },
+                        ])
+                        .then((editAnswers) => {
+                            switch (editAnswers.editOption) {
+                                case 'Edit role':
+                                    // Call your updateEmployeeRole function to edit the role, the user has to use the role id unfortunately, couldnt get the list to work for it like i could the employee name
+                                    updateEmployeeRole(employeeId);
+                                    break;
+
+                                case 'Edit manager':
+                                    // Call your updateEmployeeManager function to edit the manager, the user has to use the manager id unfortunately, couldnt get the list to work for it like i could the employee name
+                                    updateEmployeeManager(employeeId);
+                                    break;
+
+                                default:
+                                    // If the user selects an invalid edit option, show the choices again
+                                    console.log('Invalid edit option.');
+                                    showChoices();
+                                    break;
+                            }
+                        });
+                });
+        }
+    });
+}
+
+
+
+
+// this is the update employee role function, it will update the role of the employee in the database
+function updateEmployeeRole(employeeId) {
+    inquirer
+        .prompt([
+            {
+                // asking the user for the new role ID, tried to make so i could create a new role while editing the employee, but hit a wall and couldnt figure it out
+                type: 'input',
+                name: 'newRoleId',
+                message: "Enter the new role ID for the employee:",
+            },
+        ])
+        .then((answers) => {
+            const newRoleId = answers.newRoleId;
+
+            // Updating the employee's role in the database using a SQL query
+            const sql = 'UPDATE employee SET role_id = ? WHERE id = ?';
+            db.query(sql, [newRoleId, employeeId], (err, result) => {
+                if (err) {
+                    console.error('Error updating role:', err);
+                } else {
+                    console.log('Employee role updated successfully.');
+                }
+                showChoices(); // Show the menu again
+            });
+        });
+};
+
+function updateEmployeeManager(employeeId) {
+    inquirer
+        .prompt([
+            {
+                // asking the user for the new role ID, tried to make so i could create a new role while editing the employee, but hit a wall and couldnt figure it out
+                type: 'input',
+                name: 'newManagerId',
+                message: "Enter the new manager ID for the employee:",
+            },
+        ])
+        .then((answers) => {
+            const newManagerId = answers.newManagerId;
+
+            // Updating the employee's role in the database using a SQL query
+            const sql = 'UPDATE employee SET manager_id = ? WHERE id = ?';
+            db.query(sql, [newManagerId, employeeId], (err, result) => {
+                if (err) {
+                    console.error('Error updating manager:', err);
+                } else {
+                    console.log('Employee manager updated successfully.');
+                }
+                showChoices(); // Show the menu again
+            });
+        });
+};
 // added a switch statement to handle the user choices, finally able to add the view all employees, roles, and departments need to work on add employee, role, and department
 function handleUserChoice(choice) {
     switch (choice) {
@@ -223,9 +341,11 @@ function handleUserChoice(choice) {
             addEmployee();
             break;
 
-        case 'Update an employee role':
-
-            break;
+        
+            case 'Update an employee':
+                selectEmployeeToUpdate();
+                break;
+          
         case 'View all roles':
             // pretty much the same thing as the view all employees function, just with a different query from my query file
             db.query(queries[1], (err, results) => {
@@ -266,7 +386,7 @@ function handleUserChoice(choice) {
                 } else {
                     console.table(results);
                 }
-                showChoices(); 
+                showChoices();
             });
             break;
         case 'Add a Manager':
